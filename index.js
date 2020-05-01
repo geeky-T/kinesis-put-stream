@@ -1,6 +1,6 @@
-const KinesisClass = require("aws-sdk/clients/kinesis");
-const objectSize = require("object-sizeof");
-const assert = require("assert");
+const KinesisClass = require('aws-sdk/clients/kinesis');
+const objectSize = require('object-sizeof');
+const assert = require('assert');
 
 const Kinesis = new KinesisClass({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -22,8 +22,7 @@ async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const isStreamFeasible = (payloads) =>
-  objectSize(JSON.stringify(payloads)) < maxSizeForStreaming;
+const isStreamFeasible = (payloads) => objectSize(JSON.stringify(payloads)) < maxSizeForStreaming;
 
 const matchKinesisPutConditions = (payloads) => {
   if (!isStreamFeasible(payloads)) {
@@ -44,13 +43,11 @@ const pushToKinesis = (kinesisPayloads) =>
 
 const retryFailedRecords = async (retryRecordSet) => {
   await sleep(STREAM_PUT_TIMEOUT);
-  console.log("retrying failed record: ", retryRecordSet.length);
+  console.log('retrying failed record: ', retryRecordSet.length);
   const res = await pushToKinesis(retryRecordSet);
-  const tranformedRecordsInRetry =
-    res.Records.length - (res.FailedRecordCount ? res.FailedRecordCount : 0);
+  const tranformedRecordsInRetry = res.Records.length - (res.FailedRecordCount ? res.FailedRecordCount : 0);
   if (res.FailedRecordCount) {
-    const failedRecordsLength = res.Records.filter((rec) => !!rec.ErrorCode)
-      .length;
+    const failedRecordsLength = res.Records.filter((rec) => !!rec.ErrorCode).length;
     const failedRecords = retryRecordSet.splice(-1 * failedRecordsLength);
     return retryFailedRecords(failedRecords) + tranformedRecordsInRetry;
   }
@@ -65,18 +62,11 @@ const retryFailedRecords = async (retryRecordSet) => {
  * @param {number} [config.requestInterval=880] - delay between each consecutive requests in ms. Defaults 880ms
  * @param {number} [config.sizePerRequest=4.5] - sizePerRequest size of payload per request in MiB from (0 to 5). Defaults 4.5 MiB.
  */
-const putRecordToKinesisStream = async (
-  parsedRecords,
-  config,
-) => {
-  assert(config.streamName, "Provde a valid stream name for Kinesis");
-  assert(config.partitionKeyName, "Provde a valid partitionKey field-name for kinesis records");
-    try {
-    initialise(
-      config.streamName,
-      config.sizePerRequest,
-      config.requestInterval
-    );
+const putRecordToKinesisStream = async (parsedRecords, config) => {
+  assert(config.streamName, 'Provde a valid stream name for Kinesis');
+  assert(config.partitionKeyName, 'Provde a valid partitionKey field-name for kinesis records');
+  try {
+    initialise(config.streamName, config.sizePerRequest || 4.5, config.requestInterval || 880);
     const kinesisPayloads = [];
     const pushRecordsToKinesisPayloads = (record) => {
       const params = {
@@ -90,18 +80,14 @@ const putRecordToKinesisStream = async (
     for (const recordSet of buffer) {
       const res = await pushToKinesis(recordSet);
       if (res.FailedRecordCount) {
-        const failedRecordsLength = res.Records.filter((rec) => !!rec.ErrorCode)
-          .length;
+        const failedRecordsLength = res.Records.filter((rec) => !!rec.ErrorCode).length;
         const failedRecords = recordSet.splice(-1 * failedRecordsLength);
         await retryFailedRecords(recordSet.splice(failedRecords));
       }
       await sleep(STREAM_PUT_TIMEOUT);
     }
   } catch (error) {
-    console.error(
-      "PutRecordsToStream: ERROR in pushing record to kinesis stream",
-      error
-    );
+    console.error('PutRecordsToStream: ERROR in pushing record to kinesis stream', error);
     throw error;
   }
 };
