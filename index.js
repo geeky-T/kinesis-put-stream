@@ -55,27 +55,28 @@ const retryFailedRecords = async (retryRecordSet) => {
 };
 
 /**
- * @param {Array.<Object>} parsedRecords array of Records to put on Kinesis
+ * @param {Array.<Object>} payload array of Records to put on Kinesis
  * @param {Object} config
  * @param {String} config.streamName name of the Kinesis Stream
- * @param {String} config.partitionKeyName name of the field to be used as partiton key. Must be unique.
+ * @param {String} config.partitionKeyName name of the field to be used as partiton key from the payload object. Must be unique.
  * @param {number} [config.requestInterval=880] - delay between each consecutive requests in ms. Defaults 880ms
  * @param {number} [config.sizePerRequest=4.5] - sizePerRequest size of payload per request in MiB from (0 to 5). Defaults 4.5 MiB.
  */
-const putRecordToKinesisStream = async (parsedRecords, config) => {
+const putRecordToKinesisStream = async (payload, config) => {
   assert(config.streamName, 'Provde a valid stream name for Kinesis');
   assert(config.partitionKeyName, 'Provde a valid partitionKey field-name for kinesis records');
   try {
     initialise(config.streamName, config.sizePerRequest || 4.5, config.requestInterval || 880);
     const kinesisPayloads = [];
     const pushRecordsToKinesisPayloads = (record) => {
+      assert(record[partitionKeyName], `Missing field used as partition key in payload object ${JSON.stringify(record, null, 2)}`)
       const params = {
         Data: JSON.stringify(record),
         PartitionKey: record[config.partitionKeyName],
       };
       kinesisPayloads.push(params);
     };
-    parsedRecords.forEach(pushRecordsToKinesisPayloads);
+    payload.forEach(pushRecordsToKinesisPayloads);
     const buffer = matchKinesisPutConditions(kinesisPayloads);
     for (const recordSet of buffer) {
       const res = await pushToKinesis(recordSet);
