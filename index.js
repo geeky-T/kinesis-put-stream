@@ -22,7 +22,7 @@ async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const isStreamFeasible = (payloads) => objectSize(JSON.stringify(payloads)) < maxSizeForStreaming;
+const isStreamFeasible = (payloads) => objectSize(JSON.stringify(payloads)) < maxSizeForStreaming && payloads.length <= 500;
 
 const matchKinesisPutConditions = (payloads) => {
   if (!isStreamFeasible(payloads)) {
