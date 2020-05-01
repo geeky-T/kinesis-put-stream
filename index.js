@@ -1,5 +1,6 @@
 const KinesisClass = require("aws-sdk/clients/kinesis");
 const objectSize = require("object-sizeof");
+const assert = require("assert");
 
 const Kinesis = new KinesisClass({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -7,15 +8,15 @@ const Kinesis = new KinesisClass({
   region: process.env.AWS_DEFAULT_REGION,
 });
 
-let maxSizeForStreaming
-let EVENT_STREAM_NAME
-let STREAM_PUT_TIMEOUT
+let maxSizeForStreaming;
+let EVENT_STREAM_NAME;
+let STREAM_PUT_TIMEOUT;
 
 const initialise = (streamName, sizePerRequest, requestInterval) => {
-    maxSizeForStreaming = parseInt(sizePerRequest) * 1000000;
-    EVENT_STREAM_NAME = streamName;
-    STREAM_PUT_TIMEOUT = requestInterval;
-}
+  maxSizeForStreaming = parseInt(sizePerRequest) * 1000000;
+  EVENT_STREAM_NAME = streamName;
+  STREAM_PUT_TIMEOUT = requestInterval;
+};
 
 async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -56,26 +57,31 @@ const retryFailedRecords = async (retryRecordSet) => {
   return tranformedRecordsInRetry;
 };
 
-
 /**
  * @param {Array.<Object>} parsedRecords array of Records to put on Kinesis
- * @typedef {Object} Kinesis_Params
- * @property {String} streamName name of the Kinesis Stream
- * @property {String} partitionKeyName name of the field to be used as partiton key. (must be unique)
- * @param {Kinesis_Params} kinesis_params
- * @typedef {Object} Options
- * @property {number} requestInterval delay between each consecutive requests in ms, defaults 880ms
- * @property {number} sizePerRequest size of payload per request in MiB from (0 to 5), defaults 4.5 MiB 
- * @param {Options} options
+ * @param {Object} config
+ * @param {String} config.streamName name of the Kinesis Stream
+ * @param {String} config.partitionKeyName name of the field to be used as partiton key. Must be unique.
+ * @param {number} [config.requestInterval=880] - delay between each consecutive requests in ms. Defaults 880ms
+ * @param {number} [config.sizePerRequest=4.5] - sizePerRequest size of payload per request in MiB from (0 to 5). Defaults 4.5 MiB.
  */
-const putRecordToKinesisStream = async (parsedRecords, kinesis_params = {streamName, partitionKeyName}, options = { requestInterval = 880, sizePerRequest = 4.5 }) => {
+const putRecordToKinesisStream = async (
+  parsedRecords,
+  config,
+) => {
+  assert(config.streamName, "Provde a valid stream name for Kinesis");
+  assert(config.partitionKeyName, "Provde a valid partitionKey field-name for kinesis records");
     try {
-    initialise(kinesis_params.streamName, options.sizePerRequest, options.requestInterval)
+    initialise(
+      config.streamName,
+      config.sizePerRequest,
+      config.requestInterval
+    );
     const kinesisPayloads = [];
     const pushRecordsToKinesisPayloads = (record) => {
       const params = {
         Data: JSON.stringify(record),
-        PartitionKey: record[kinesis_params.partitionKeyName],
+        PartitionKey: record[config.partitionKeyName],
       };
       kinesisPayloads.push(params);
     };
@@ -87,16 +93,17 @@ const putRecordToKinesisStream = async (parsedRecords, kinesis_params = {streamN
         const failedRecordsLength = res.Records.filter((rec) => !!rec.ErrorCode)
           .length;
         const failedRecords = recordSet.splice(-1 * failedRecordsLength);
-        await retryFailedRecords(
-          recordSet.splice(failedRecords)
-        );
+        await retryFailedRecords(recordSet.splice(failedRecords));
       }
       await sleep(STREAM_PUT_TIMEOUT);
     }
   } catch (error) {
-    console.error("PutRecordsToStream: ERROR in pushing record to kinesis stream", error);
+    console.error(
+      "PutRecordsToStream: ERROR in pushing record to kinesis stream",
+      error
+    );
     throw error;
   }
 };
 
-module.exports = putRecordToKinesisStream
+module.exports = putRecordToKinesisStream;
