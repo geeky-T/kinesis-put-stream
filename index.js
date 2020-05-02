@@ -69,7 +69,7 @@ const putRecordToKinesisStream = async (payload, config) => {
     initialise(config.streamName, config.sizePerRequest || 4.5, config.requestInterval || 880);
     const kinesisPayloads = [];
     const pushRecordsToKinesisPayloads = (record) => {
-      assert(record[partitionKeyName], `Missing field used as partition key in payload object ${JSON.stringify(record, null, 2)}`)
+      assert(record[config.partitionKeyName], `Missing field used as partition key in payload object ${JSON.stringify(record, null, 2)}`)
       const params = {
         Data: JSON.stringify(record),
         PartitionKey: record[config.partitionKeyName],
