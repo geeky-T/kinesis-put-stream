@@ -1,15 +1,17 @@
 {
   "name": "kinesis-put-stream",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Enables Streaming of large data into kinesis via appropriate method to overcome AWS Kinesis putRecords API limitations.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
-  "license": "ISC",
+  "license": "",
   "dependencies": {
-    "aws-sdk": "^2.667.0",
     "object-sizeof": "^1.6.0"
+  },
+  "peerDependencies": {
+    "aws-sdk": "^2.667.0"
   }
 }

@@ -24,24 +24,30 @@ async function sleep(ms) {
 
 const isStreamFeasible = (payloads) => objectSize(JSON.stringify(payloads)) < maxSizeForStreaming && payloads.length <= 500;
 
-const matchKinesisPutConditions = (payloads) => {
+const chunkKinesisPayload = (payloads) => {
   if (!isStreamFeasible(payloads)) {
     const tempBuffer = [];
     while (!isStreamFeasible(payloads)) {
       tempBuffer.push(payloads.pop());
     }
-    return [payloads, ...matchKinesisPutConditions(tempBuffer)];
+    return [payloads, ...chunkKinesisPayload(tempBuffer)];
   }
   return [payloads];
 };
 
-const pushToKinesis = (kinesisPayloads) =>
+const pushToKinesis = async (kinesisPayloads) =>
   Kinesis.putRecords({
     Records: kinesisPayloads,
     StreamName: EVENT_STREAM_NAME,
   }).promise();
 
+/**
+ * @param  {Array.<Object>} retryRecordSet array of Records to put on Kinesis
+ * This function  will be called for the records failed to be pushed in the first attempt
+ * due to threshold limit of the shards getting exceeded.
+ */
 const retryFailedRecords = async (retryRecordSet) => {
+  // delaying retry, so that all records may pass in single attempt
   await sleep(STREAM_PUT_TIMEOUT);
   console.log('retrying failed record: ', retryRecordSet.length);
   const res = await pushToKinesis(retryRecordSet);
@@ -77,14 +83,16 @@ const putRecordToKinesisStream = async (payload, config) => {
       kinesisPayloads.push(params);
     };
     payload.forEach(pushRecordsToKinesisPayloads);
-    const buffer = matchKinesisPutConditions(kinesisPayloads);
-    for (const recordSet of buffer) {
-      const res = await pushToKinesis(recordSet);
+    const chunkedKinesisPayloads = chunkKinesisPayload(kinesisPayloads);
+    for (const currentKinesisPayloads of chunkedKinesisPayloads) {
+      const res = await pushToKinesis(currentKinesisPayloads);
       if (res.FailedRecordCount) {
         const failedRecordsLength = res.Records.filter((rec) => !!rec.ErrorCode).length;
-        const failedRecords = recordSet.splice(-1 * failedRecordsLength);
-        await retryFailedRecords(recordSet.splice(failedRecords));
+        const failedRecords = currentKinesisPayloads.splice(-1 * failedRecordsLength);
+        // slicing the failed record to retry
+        await retryFailedRecords(failedRecords);
       }
+      // delay between each chunk
       await sleep(STREAM_PUT_TIMEOUT);
     }
   } catch (error) {
